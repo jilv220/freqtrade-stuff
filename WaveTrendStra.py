@@ -28,20 +28,19 @@ class WaveTrendStra(IStrategy):
     stoploss = -0.25
 
     # Optimal timeframe for the strategy
-    timeframe = '5m'
+    timeframe = '4h'
 
     def populate_indicators(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
 
-        dataframe["avg_price"]
-            = (dataframe["high"] + dataframe["low"] + dataframe["close"]) / 3
+        ap = (dataframe["high"] + dataframe["low"] + dataframe["close"]) / 3
 
-        esa = ta.EMA(dataframe["avg_price"], 10)
-        d = ta.EMA(abs(esa - d), 10)
+        esa = ta.EMA(ap, 10)
+        d = ta.EMA(abs(ap - esa), 10)
         ci = (ap - esa) / (0.015 * d)
         tci = ta.EMA(ci, 21)
 
         dataframe["wt1"] = tci
-        dataframe["wt2"] = ta.SMA(wt1, 4)
+        dataframe["wt2"] = ta.SMA(dataframe["wt1"], 4)
 
         return dataframe
 
