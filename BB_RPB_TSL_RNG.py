@@ -182,7 +182,7 @@ class BB_RPB_TSL_RNG(IStrategy):
 
     def informative_pairs(self):
 
-        informative_pairs = [("BTC/BUSD", "5m")]
+        informative_pairs = [("BTC/USDT", "5m")]
 
         return informative_pairs
 
@@ -237,7 +237,7 @@ class BB_RPB_TSL_RNG(IStrategy):
 
         # BTC info
         inf_tf = '5m'
-        informative = self.dp.get_pair_dataframe('BTC/BUSD', timeframe=inf_tf)
+        informative = self.dp.get_pair_dataframe('BTC/USDT', timeframe=inf_tf)
         informative_past = informative.copy().shift(1)                                                                                                   # Get recent BTC info
 
         # BTC 5m dump protection
