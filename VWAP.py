@@ -30,9 +30,7 @@ def top_percent_change(dataframe: DataFrame, length: int) -> float:
 class VWAP(IStrategy):
     """
 
-    author@: Gert Wohlgemuth
-
-    just a skeleton
+    author: @jilv220
 
     """
 
