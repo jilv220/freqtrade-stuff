@@ -1,0 +1,147 @@
+
+{
+    "max_open_trades": 5,
+    "stake_currency": "USDT",
+    "stake_amount": "unlimited",
+    "tradable_balance_ratio": 0.99,
+    "amend_last_stake_amount": true,
+    "fiat_display_currency": "USD",
+    "timeframe": "5m",
+    "cancel_open_orders_on_exit": false,
+    "unfilledtimeout": {
+        "buy": 5,
+        "sell": 1,
+        "unit": "minutes"
+    },
+    "order_types": {
+        "buy": "market",
+        "sell": "market",
+        "emergencysell": "market",
+        "trailing_stop_loss": "market",
+        "stoploss": "market",
+        "stoploss_on_exchange": false,
+        "stoploss_on_exchange_interval": 60
+    },
+    "bid_strategy": {
+        "price_side": "ask",
+        "ask_last_balance": 0.0,
+        "use_order_book": false,
+        "order_book_top": 1,
+        "check_depth_of_market": {
+            "enabled": false,
+            "bids_to_ask_delta": 1
+        }
+    },
+    "ask_strategy": {
+        "price_side": "bid",
+        "use_order_book": false,
+        "order_book_min": 1,
+        "order_book_max": 1
+    },
+    "exchange": {
+        "name": "kucoin",
+        "key": " ",
+        "secret": " ",
+        "password": " ",
+        "ccxt_config": {
+            "enableRateLimit": true,
+            "rateLimit": 200
+        },
+        "ccxt_async_config": {
+            "enableRateLimit": true,
+            "rateLimit": 200
+        },
+        "pair_whitelist": [
+            "ADA/USDT",
+            "ALGO/USDT",
+            "ATOM/USDT",
+            "AAVE/USDT",
+            "AVAX/USDT",
+            "AXS/USDT",
+            "ANKR/USDT",
+            "BLOK/USDT",
+            "BSV/USDT",
+            "CHR/USDT",
+            "CKB/USDT",
+            "COMP/USDT",
+            "COTI/USDT",
+            "CRV/USDT",
+            "CRO/USDT",
+            "DAG/USDT",
+            "DASH/USDT",
+            "DYDX/USDT",
+            "ENS/USDT",
+            "ENJ/USDT",
+            "ERG/USDT",
+            "ETC/USDT",
+            "FIL/USDT",
+            "FLUX/USDT",
+            "FTM/USDT",
+            "FTT/USDT",
+            "GALAX/USDT",
+            "HTR/USDT",
+            "IOTX/USDT",
+            "IOST/USDT",
+            "JASMY/USDT",
+            "KDA/USDT",
+            "MANA/USDT",
+            "MATIC/USDT",
+            "MOVR/USDT",
+            "NEAR/USDT",
+            "NEO/USDT",
+            "ORN/USDT",
+            "PYR/USDT",
+            "QNT/USDT",
+            "QRDO/USDT",
+            "RMRK/USDT",
+            "ROSE/USDT",
+            "SAND/USDT",
+            "SOL/USDT",
+            "SOUL/USDT",
+            "SUPER/USDT",
+            "THETA/USDT",
+            "TOKO/USDT",
+            "TRX/USDT",
+            "VRA/USDT",
+            "WOO/USDT",
+            "XDB/USDT",
+            "XDC/USDT",
+            "XEM/USDT",
+            "XPR/USDT",
+            "XRP/USDT",
+            "XTZ/USDT",
+            "XYO/USDT",
+            "ZIL/USDT",
+            "TEL/USDT",
+            "1INCH/USDT",
+        ],
+        "pair_blacklist": [
+
+        ]
+    },
+    "pairlists": [
+        {
+            "method": "StaticPairList",
+        }
+    ],
+    "edge": {
+        "enabled": false,
+        "process_throttle_secs": 3600,
+        "calculate_since_number_of_days": 7,
+        "allowed_risk": 0.01,
+        "stoploss_range_min": -0.01,
+        "stoploss_range_max": -0.1,
+        "stoploss_range_step": -0.01,
+        "minimum_winrate": 0.60,
+        "minimum_expectancy": 0.20,
+        "min_trade_number": 10,
+        "max_trade_duration_minute": 1440,
+        "remove_pumps": false
+    },
+    "bot_name": "freqtrade",
+    "initial_state": "running",
+    "forcebuy_enable": false,
+    "internals": {
+        "process_throttle_secs": 5
+    }
+}
