@@ -156,19 +156,21 @@ class true_lambo(IStrategy):
         "high_offset": 0.87,
         "high_offset_2": 1.166,
         ##
-        "pHSL": -0.07,
-        "pPF_1": 0.012,
-        "pPF_2": 0.068,
+        "high_offset": 0.963,
+        "high_offset_2": 1.391,
+        "pHSL": -0.083,
+        "pPF_1": 0.011,
+        "pPF_2": 0.048,
         "pSL_1": 0.02,
-        "pSL_2": 0.043,
+        "pSL_2": 0.041,
     }
 
     # ROI
     minimal_roi = {
-        "0": 0.109,
-        "27": 0.093,
-        "85": 0.038,
-        "125": 0.005
+        "0": 0.092,
+        "29": 0.042,
+        "85": 0.028,
+        "128": 0.005
     }
 
     # Optimal timeframe for the strategy
@@ -289,14 +291,14 @@ class true_lambo(IStrategy):
     ## Trailing params
 
     # hard stoploss profit
-    pHSL = DecimalParameter(-0.350, -0.040, default=-0.08, decimals=3, space='sell', load=True, optimize=False)
+    pHSL = DecimalParameter(-0.10, -0.040, default=-0.08, decimals=3, space='sell', load=True, optimize=True)
     # profit threshold 1, trigger point, SL_1 is used
-    pPF_1 = DecimalParameter(0.008, 0.020, default=0.016, decimals=3, space='sell', load=True, optimize=False)
-    pSL_1 = DecimalParameter(0.008, 0.020, default=0.011, decimals=3, space='sell', load=True, optimize=False)
+    pPF_1 = DecimalParameter(0.008, 0.020, default=0.016, decimals=3, space='sell', load=True, optimize=True)
+    pSL_1 = DecimalParameter(0.008, 0.020, default=0.011, decimals=3, space='sell', load=True, optimize=True)
 
     # profit threshold 2, SL_2 is used
-    pPF_2 = DecimalParameter(0.040, 0.100, default=0.080, decimals=3, space='sell', load=True, optimize=False)
-    pSL_2 = DecimalParameter(0.020, 0.070, default=0.040, decimals=3, space='sell', load=True, optimize=False)
+    pPF_2 = DecimalParameter(0.040, 0.100, default=0.080, decimals=3, space='sell', load=True, optimize=True)
+    pSL_2 = DecimalParameter(0.020, 0.070, default=0.040, decimals=3, space='sell', load=True, optimize=True)
 
     ############################################################################
 
@@ -352,8 +354,8 @@ class true_lambo(IStrategy):
             buy_tag = trade.buy_tag
         buy_tags = buy_tag.split()
 
-        # sell vwap
-        if last_candle['close'] < last_candle['ema_50']:
+        # sell vwap (bear, conservative sell)
+        if last_candle['ema_vwap_diff_50'] > 0.02:
             if current_profit >= 0.005:
                 if (last_candle['close'] > last_candle['vwap_middleband'] * 0.99) and (last_candle['rsi'] > 41):
                     return f"sell_profit_vwap( {buy_tag})"
@@ -448,6 +450,9 @@ class true_lambo(IStrategy):
 
         dataframe['cci'] = ta.CCI(dataframe)
         dataframe['mfi'] = ta.MFI(dataframe)
+
+        # Diff
+        dataframe['ema_vwap_diff_50'] = ( ( dataframe['ema_50'] - dataframe['vwap_lowerband'] ) / dataframe['ema_50'] )
 
         # Calculate all ma_sell values
         for val in self.base_nb_candles_sell.range:
