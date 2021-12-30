@@ -33,6 +33,17 @@ def VWAPB(dataframe, window_size=20, num_of_std=1):
     df['vwap_high'] = df['vwap'] + (rolling_std * num_of_std)
     return df['vwap_low'], df['vwap'], df['vwap_high']
 
+def top_percent_change(dataframe: DataFrame, length: int) -> float:
+        """
+        Percentage change of the current close from the range maximum Open price
+        :param dataframe: DataFrame The original OHLC dataframe
+        :param length: int The length to look back
+        """
+        if length == 0:
+            return (dataframe['open'] - dataframe['close']) / dataframe['close']
+        else:
+            return (dataframe['open'].rolling(length).max() - dataframe['close']) / dataframe['close']
+
 # Williams %R
 def williams_r(dataframe: DataFrame, period: int = 14) -> Series:
     """Williams %R, or just %R, is a technical analysis oscillator showing the current closing price in relation to the high and low
@@ -53,8 +64,18 @@ def williams_r(dataframe: DataFrame, period: int = 14) -> Series:
     return WR * -100
 
 class true_lambo(IStrategy):
+
     '''
     @ jilv220
+
+    Based on BB_RPB_3c.
+
+    The discovery is that the pump protection is only needed for EWO level 2 (4 ~ 8)
+    And the dump protection is only needed for EWO level 5 (< -8)
+
+    Higher parameter delta is needed for EWO level 4 (-4 ~ -8)
+
+    Vwap and Cluc can handle rest of the market pretty well
 
     '''
 
@@ -67,6 +88,10 @@ class true_lambo(IStrategy):
         ##
         "buy_pump_2_factor": 1.125,
         ##
+        "buy_crash_4_tpct_0": 0.141,
+        "buy_crash_4_tpct_3": 0.031,
+        "buy_crash_4_tpct_9": 0.091,
+        ##
         "buy_adx": 20,
         "buy_fastd": 20,
         "buy_fastk": 22,
@@ -77,47 +102,46 @@ class true_lambo(IStrategy):
         "buy_gumbo_ewo_low": -9.442,
         "buy_gumbo_cti": -0.374,
         "buy_gumbo_r14": -51.971,
+        "buy_gumbo_tpct_0": 0.067,
+        "buy_gumbo_tpct_3": 0.0,
+        "buy_gumbo_tpct_9": 0.016,
         ##
         "buy_clucha_bbdelta_close": 0.03734,
         "buy_clucha_bbdelta_close_2": 0.0391,
         "buy_clucha_bbdelta_close_3": 0.03943,
-        "buy_clucha_bbdelta_close_4": 0.00172,
-        "buy_clucha_bbdelta_close_5": 0.02196,
+        "buy_clucha_bbdelta_close_4": 0.04202,
         ##
         "buy_clucha_bbdelta_tail": 0.78624,
         "buy_clucha_bbdelta_tail_2": 1.05718,
         "buy_clucha_bbdelta_tail_3": 0.77701,
-        "buy_clucha_bbdelta_tail_4": 0.91548,
-        "buy_clucha_bbdelta_tail_5": 1.45088,
+        "buy_clucha_bbdelta_tail_4": 0.418,
         ##
         "buy_clucha_closedelta_close": 0.01382,
         "buy_clucha_closedelta_close_2": 0.01092,
         "buy_clucha_closedelta_close_3": 0.00935,
-        "buy_clucha_closedelta_close_4": 0.00528,
-        "buy_clucha_closedelta_close_5": 0.00522,
+        "buy_clucha_closedelta_close_4": 0.01234,
         ##
         "buy_clucha_rocr_1h": 0.70818,
         "buy_clucha_rocr_1h_2": 0.15848,
         "buy_clucha_rocr_1h_3": 0.88989,
-        "buy_clucha_rocr_1h_4": 0.89939,
-        "buy_clucha_rocr_1h_5": 0.64864,
+        "buy_clucha_rocr_1h_4": 0.99234,
         ##
         "buy_vwap_closedelta": 19.889,
         "buy_vwap_closedelta_2": 20.099,
         "buy_vwap_closedelta_3": 27.526,
-        "buy_vwap_closedelta_4": 21.806,
+        "buy_vwap_closedelta_4": 22.26,
         "buy_vwap_closedelta_5": 23.227,
         ##
         "buy_vwap_cti": -0.258,
         "buy_vwap_cti_2": -0.748,
         "buy_vwap_cti_3": -0.227,
-        "buy_vwap_cti_4": -0.664,
+        "buy_vwap_cti_4": -0.763,
         "buy_vwap_cti_5": -0.021,
         ##
         "buy_vwap_width": 0.266,
         "buy_vwap_width_2": 3.212,
         "buy_vwap_width_3": 0.47,
-        "buy_vwap_width_4": 8.577,
+        "buy_vwap_width_4": 9.76,
         "buy_vwap_width_5": 5.374,
         ##
         "buy_lambo2_ema": 0.986,
@@ -217,19 +241,22 @@ class true_lambo(IStrategy):
     buy_clucha_closedelta_close_3 = DecimalParameter(0.0005, 0.025, default=0.019, decimals=5, optimize = is_optimize_clucha_3)
     buy_clucha_rocr_1h_3 = DecimalParameter(0.001, 1.0, default=0.131, decimals=5, optimize = is_optimize_clucha_3)
 
-    is_optimize_clucha_4 = False
-    buy_clucha_bbdelta_close_4 = DecimalParameter(0.0005, 0.042, default=0.034, decimals=5, optimize = is_optimize_clucha_4)
-    buy_clucha_bbdelta_tail_4 = DecimalParameter(0.7, 1.1, default=0.95, decimals=5, optimize = is_optimize_clucha_4)
+    is_optimize_clucha_4 = True
+    buy_clucha_bbdelta_close_4 = DecimalParameter(0.0005, 0.06, default=0.034, decimals=5, optimize = is_optimize_clucha_4)
+    buy_clucha_bbdelta_tail_4 = DecimalParameter(0.35, 1.1, default=0.95, decimals=5, optimize = is_optimize_clucha_4)
     buy_clucha_closedelta_close_4 = DecimalParameter(0.0005, 0.025, default=0.019, decimals=5, optimize = is_optimize_clucha_4)
     buy_clucha_rocr_1h_4 = DecimalParameter(0.001, 1.0, default=0.131, decimals=5, optimize = is_optimize_clucha_4)
 
     is_optimize_gumbo = False
     buy_gumbo_ema = DecimalParameter(0.9, 1.2, default=0.97 , optimize = is_optimize_gumbo)
     buy_gumbo_ewo_low = DecimalParameter(-12.0, 5, default=-5.585, optimize = is_optimize_gumbo)
+    buy_gumbo_cti = DecimalParameter(-0.9, -0.0, default=-0.5 , optimize = is_optimize_gumbo)
+    buy_gumbo_r14 = DecimalParameter(-100, -44, default=-60 , optimize = is_optimize_gumbo)
 
     is_optimize_gumbo_protection = False
-    buy_gumbo_cti = DecimalParameter(-0.9, -0.0, default=-0.5 , optimize = is_optimize_gumbo_protection)
-    buy_gumbo_r14 = DecimalParameter(-100, -44, default=-60 , optimize = is_optimize_gumbo_protection)
+    buy_gumbo_tpct_0 = DecimalParameter(0.0, 0.25, default=0.131, decimals=2, optimize = is_optimize_gumbo_protection)
+    buy_gumbo_tpct_3 = DecimalParameter(0.0, 0.25, default=0.131, decimals=2, optimize = is_optimize_gumbo_protection)
+    buy_gumbo_tpct_9 = DecimalParameter(0.0, 0.25, default=0.131, decimals=2, optimize = is_optimize_gumbo_protection)
 
     is_optimize_vwap = False
     buy_vwap_width = DecimalParameter(0.05, 10.0, default=0.80 , optimize = is_optimize_vwap)
@@ -246,7 +273,7 @@ class true_lambo(IStrategy):
     buy_vwap_closedelta_3 = DecimalParameter(10.0, 30.0, default=15.0, optimize = is_optimize_vwap_3)
     buy_vwap_cti_3 = DecimalParameter(-0.9, -0.0, default=-0.6 , optimize = is_optimize_vwap_3)
 
-    is_optimize_vwap_4 = False
+    is_optimize_vwap_4 = True
     buy_vwap_width_4 = DecimalParameter(0.05, 10.0, default=0.80 , optimize = is_optimize_vwap_4)
     buy_vwap_closedelta_4 = DecimalParameter(10.0, 30.0, default=15.0, optimize = is_optimize_vwap_4)
     buy_vwap_cti_4 = DecimalParameter(-0.9, -0.0, default=-0.6 , optimize = is_optimize_vwap_4)
@@ -279,9 +306,15 @@ class true_lambo(IStrategy):
     buy_V_cti_5 = DecimalParameter(-0.95, -0.0, default=-0.6 , optimize = is_optimize_V_5)
     buy_V_r14_5 = DecimalParameter(-100, 0, default=-60 , optimize = is_optimize_V_5)
     buy_V_mfi_5 = DecimalParameter(10, 40, default=30 , optimize = is_optimize_V_5)
+    buy_V_diff_5 = DecimalParameter(0.10, 0.20, default=0.10 , optimize = is_optimize_V_5)
 
     is_optimize_pump_2 = False
     buy_pump_2_factor = DecimalParameter(1.0, 1.20, default= 1.1 , optimize = is_optimize_pump_2)
+
+    is_optimize_crash_4 = False
+    buy_crash_4_tpct_0 = DecimalParameter(0.02, 0.04, default=0.02, decimals=3, optimize = is_optimize_crash_4)
+    buy_crash_4_tpct_3 = DecimalParameter(0.05, 0.10, default=0.05, decimals=2, optimize = is_optimize_crash_4)
+    buy_crash_4_tpct_9 = DecimalParameter(0.13, 0.32, default=0.13, decimals=2, optimize = is_optimize_crash_4)
 
     ## Sell params
     base_nb_candles_sell = IntParameter(5, 80, default=sell_params['base_nb_candles_sell'], space='sell', optimize=False)
@@ -454,6 +487,13 @@ class true_lambo(IStrategy):
         # Diff
         dataframe['ema_vwap_diff_50'] = ( ( dataframe['ema_50'] - dataframe['vwap_lowerband'] ) / dataframe['ema_50'] )
 
+        # Crash protection
+        dataframe['tpct_0'] = top_percent_change(dataframe , 0)
+        dataframe['tpct_3'] = top_percent_change(dataframe , 3)
+        dataframe['tpct_9'] = top_percent_change(dataframe , 9)
+        #dataframe['tpct_24'] = top_percent_change(dataframe , 24)
+        #dataframe['tpct_42'] = top_percent_change(dataframe , 42)
+
         # Calculate all ma_sell values
         for val in self.base_nb_candles_sell.range:
             dataframe[f'ma_sell_{val}'] = ta.EMA(dataframe, timeperiod=val)
@@ -499,6 +539,12 @@ class true_lambo(IStrategy):
                 (dataframe['close'].rolling(48).max() >= (dataframe['close'] * self.buy_pump_2_factor.value ))
             )
 
+        is_crash_4 = (
+                (dataframe['tpct_0'] < self.buy_crash_4_tpct_0.value) &
+                (dataframe['tpct_3'] < self.buy_crash_4_tpct_3.value) &
+                (dataframe['tpct_9'] < self.buy_crash_4_tpct_9.value)
+            )
+
         is_cofi = (
                 (dataframe['open'] < dataframe['ema_8'] * self.buy_ema_cofi.value) &
                 (qtpylib.crossed_above(dataframe['fastk'], dataframe['fastd'])) &
@@ -509,11 +555,16 @@ class true_lambo(IStrategy):
             )
 
         is_gumbo = (                                                                        # Modified from gumbo1, creadit goes to original author @raph92
-                (dataframe['EWO'] < self.buy_gumbo_ewo_low.value) &
                 (dataframe['bb_middleband2_1h'] >= dataframe['T3_1h']) &
                 (dataframe['T3'] <= dataframe['ema_8'] * self.buy_gumbo_ema.value) &
                 (dataframe['cti'] < self.buy_gumbo_cti.value) &
-                (dataframe['r_14'] < self.buy_gumbo_r14.value)
+                (dataframe['r_14'] < self.buy_gumbo_r14.value) &
+                (dataframe['EWO'] < self.buy_gumbo_ewo_low.value) &
+
+                # Crash Protection
+                (dataframe['tpct_0'] < self.buy_gumbo_tpct_0.value) &
+                (dataframe['tpct_3'] < self.buy_gumbo_tpct_3.value) &
+                (dataframe['tpct_9'] < self.buy_gumbo_tpct_9.value)
             )
 
         is_clucHA = (
@@ -555,7 +606,7 @@ class true_lambo(IStrategy):
                         (dataframe['ha_close'] < dataframe['ha_close'].shift())
                 ) &
                 (dataframe['EWO'] < 4) &
-                (dataframe['EWO'] > -4)
+                (dataframe['EWO'] > -2.5)
             )
 
         is_clucHA_4 = (
@@ -570,6 +621,8 @@ class true_lambo(IStrategy):
                 ) &
                 (dataframe['EWO'] < -4) &
                 (dataframe['EWO'] > -8)
+                #&
+                #(is_crash_4)
             )
 
         is_vwap = (
@@ -596,7 +649,7 @@ class true_lambo(IStrategy):
                 (dataframe['closedelta'] > dataframe['close'] * self.buy_vwap_closedelta_3.value / 1000 ) &
                 (dataframe['cti'] < self.buy_vwap_cti_3.value) &
                 (dataframe['EWO'] < 4) &
-                (dataframe['EWO'] > -4)
+                (dataframe['EWO'] > -2.5)
             )
 
         is_vwap_4 = (
@@ -606,6 +659,8 @@ class true_lambo(IStrategy):
                 (dataframe['cti'] < self.buy_vwap_cti_4.value) &
                 (dataframe['EWO'] < -4) &
                 (dataframe['EWO'] > -8)
+                #&
+                #(is_crash_4)
             )
 
         is_lambo_2 = (
@@ -640,7 +695,9 @@ class true_lambo(IStrategy):
                 (dataframe['cti'] < self.buy_V_cti_5.value) &
                 (dataframe['r_14'] < self.buy_V_r14_5.value) &
                 (dataframe['mfi'] < self.buy_V_mfi_5.value) &
-                (dataframe['EWO'] < -8)
+                # Really Bear, don't engage until dump over
+                (dataframe['ema_vwap_diff_50'] > 0.215) &
+                (dataframe['EWO'] < -10)
             )
 
         is_additional_check = (
@@ -655,17 +712,14 @@ class true_lambo(IStrategy):
         conditions.append(is_cofi)                                                   # ~3.21 90.8%
         dataframe.loc[is_cofi, 'buy_tag'] += 'cofi '
 
-        conditions.append(is_gumbo)                                                  # ~2.63 / 90.6% / 41.49%      F   (263 %)
-        dataframe.loc[is_gumbo, 'buy_tag'] += 'gumbo '
-
-        ## EWO > 8
+        # EWO > 8
         conditions.append(is_vwap)                                                   # ~67.3%
         dataframe.loc[is_vwap, 'buy_tag'] += 'vwap '
 
         conditions.append(is_V)                                                      # ~67.9%
         dataframe.loc[is_V, 'buy_tag'] += 'V '
 
-        ## EWO 4 ~ 8
+        # EWO 4 ~ 8
         conditions.append(is_lambo_2)                                                # ~67.7%
         dataframe.loc[is_lambo_2, 'buy_tag'] += 'lambo_2 '
 
@@ -678,14 +732,14 @@ class true_lambo(IStrategy):
         conditions.append(is_V_2)                                                    # ~67.9%
         dataframe.loc[is_V_2, 'buy_tag'] += 'V_2 '
 
-        ## EWO -4 ~ 4
+        # EWO -2.5 ~ 4
         conditions.append(is_clucHA_3)                                               # ~68.2%
         dataframe.loc[is_clucHA_3, 'buy_tag'] += 'cluc_3 '
 
         conditions.append(is_vwap_3)                                                 # ~67.3%
         dataframe.loc[is_vwap_3, 'buy_tag'] += 'vwap_3 '
 
-        ## EWO -8 ~ -4
+        # EWO -8 ~ -4
         conditions.append(is_clucHA_4)                                               # ~68.2%
         dataframe.loc[is_clucHA_4, 'buy_tag'] += 'cluc_4 '
 
@@ -693,6 +747,9 @@ class true_lambo(IStrategy):
         dataframe.loc[is_vwap_4, 'buy_tag'] += 'vwap_4 '
 
         ## EWO < -8
+        conditions.append(is_gumbo)                                                  # ~2.63 / 90.6% / 41.49%      F   (263 %)
+        dataframe.loc[is_gumbo, 'buy_tag'] += 'gumbo '
+
         conditions.append(is_V_5)                                                    # ~67.9%
         dataframe.loc[is_V_5, 'buy_tag'] += 'V_5 '
 
