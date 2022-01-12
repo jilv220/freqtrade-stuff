@@ -59,7 +59,7 @@ class BB_RPB_3c(IStrategy):
     Desigend to use with 3c (https://github.com/AlexBabescu/freqtrade_3commas)
 
     3c settings :
-    TP: 1.6%, BO: 42.0 USDT, SO: 42.0 USDT, OS: 1.4, SS: 1.68, MAD: 4, SOS: 1.9, MSTC: 5, SDSP: 1
+    TTP: 1.4(0.2)%, BO: 42.0 USDT, SO: 42.0 USDT, OS: 1.6, SS: 1.52, MAD: 4, SOS: 1.93, MSTC: 5, SDSP: 1
 
     Don't use this without DCA, or you will lose money like a lambo
 
