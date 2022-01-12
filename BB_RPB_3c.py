@@ -344,6 +344,7 @@ class BB_RPB_3c(IStrategy):
 
         # RSI
         informative['rsi'] = ta.RSI(informative, timeperiod=14)
+        informative['rsi_42'] = ta.RSI(informative, timeperiod=42)
 
         # EMA
         informative['ema_200'] = ta.EMA(informative, timeperiod=200)
@@ -411,6 +412,7 @@ class BB_RPB_3c(IStrategy):
         is_additional_check = (
                 (dataframe['rsi_84'] < 60) &
                 (dataframe['rsi_112'] < 60) &
+                (dataframe['rsi_42_1h'] < 56) &
                 (dataframe['volume'] > 0)
             )
 
