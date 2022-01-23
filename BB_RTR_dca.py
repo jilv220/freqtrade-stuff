@@ -152,7 +152,7 @@ class BB_RTR(IStrategy):
 
     # sell space
     sell_params = {
-        "pHSL": -0.998,                         # Disable
+        "pHSL": -0.998,                         # Disable ?
         "pPF_1": 0.019,
         "pPF_2": 0.065,
         "pSL_1": 0.019,
@@ -171,6 +171,9 @@ class BB_RTR(IStrategy):
         "sell_deadfish_bb_factor": 0.954,
         "sell_deadfish_bb_width": 0.043,
         "sell_deadfish_volume_factor": 2.37,
+        ##
+        "sell_cmf_div_1_cmf": 0.442,
+        "sell_cmf_div_1_profit": 0.02,
     }
 
     # ROI
@@ -286,7 +289,7 @@ class BB_RTR(IStrategy):
     sell_u_e_2_rsi = IntParameter(10, 30, default=24, optimize = is_optimize_sell_u_e_2)
 
     is_optimize_deadfish = False
-    sell_deadfish_bb_width = DecimalParameter(0.015, 0.05, default=0.05 , optimize = is_optimize_deadfish)
+    sell_deadfish_bb_width = DecimalParameter(0.010, 0.025, default=0.05 , optimize = is_optimize_deadfish)
     sell_deadfish_profit = DecimalParameter(-0.10, -0.05, default=-0.05 , optimize = is_optimize_deadfish)
     sell_deadfish_bb_factor = DecimalParameter(0.90, 1.20, default=1.0 , optimize = is_optimize_deadfish)
     sell_deadfish_volume_factor = DecimalParameter(1.5, 3, default=1.5 , optimize = is_optimize_deadfish)
@@ -294,6 +297,12 @@ class BB_RTR(IStrategy):
     is_optimize_cti_r = False
     sell_cti_r_cti = DecimalParameter(0.55, 1, default=0.5 , optimize = is_optimize_cti_r)
     sell_cti_r_r = DecimalParameter(-15, 0, default=-20 , optimize = is_optimize_cti_r)
+
+    is_optimize_cmf_div = True
+    sell_cmf_div_1_profit = DecimalParameter(0.005, 0.02, default=0.005 , optimize = is_optimize_cmf_div)
+    sell_cmf_div_1_cmf = DecimalParameter(0.0, 0.5, default=0.0 , optimize = is_optimize_cmf_div)
+    sell_cmf_div_2_profit = DecimalParameter(0.005, 0.02, default=0.005 , optimize = is_optimize_cmf_div)
+    sell_cmf_div_2_cmf = DecimalParameter(0.0, 0.5, default=0.0 , optimize = is_optimize_cmf_div)
 
     ## Trailing params
 
@@ -404,9 +413,18 @@ class BB_RTR(IStrategy):
         # sell vwap dump
         if (
                 (current_profit > 0.005)
+                and (last_candle['ema_vwap_diff_50'] > 0.0)
                 and (last_candle['ema_vwap_diff_50'] < 0.012)
-            ):
+        ):
             return f"sell_vwap_dump( {buy_tag})"
+
+        # sell cmf div
+        if (
+                (current_profit > 0.005)
+                and (last_candle['cmf'] > 0)
+                and (last_candle['cmf_div_slow'] == 1)
+        ):
+            return f"sell_cmf_div( {buy_tag})"
 
         # stoploss
         if (
@@ -425,8 +443,8 @@ class BB_RTR(IStrategy):
                 and (last_candle['bb_width'] < self.sell_deadfish_bb_width.value)
                 and (last_candle['close'] > last_candle['bb_middleband2'] * self.sell_deadfish_bb_factor.value)
                 and (last_candle['volume_mean_12'] < last_candle['volume_mean_24'] * self.sell_deadfish_volume_factor.value)
-
-            ):
+                and (last_candle['cmf'] < 0.0)
+        ):
             return f"sell_stoploss_deadfish( {buy_tag})"
 
     ############################################################################
@@ -567,6 +585,10 @@ class BB_RTR(IStrategy):
         dataframe['momdiv_sell'] = mom['momdiv_sell']
         dataframe['momdiv_coh'] = mom['momdiv_coh']
         dataframe['momdiv_col'] = mom['momdiv_col']
+
+        # cmf div
+        dataframe['cmf_div_fast'] = ( ( dataframe['cmf'].rolling(12).max() >= dataframe['cmf'] * 1.025 ) )
+        dataframe['cmf_div_slow'] = ( ( dataframe['cmf'].rolling(20).max() >= dataframe['cmf'] * 1.025 ) )
 
         # Modified Elder Ray Index
         dataframe['moderi_96'] = moderi(dataframe, 96)
