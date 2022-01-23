@@ -84,6 +84,8 @@ def top_percent_change(dataframe: DataFrame, length: int) -> float:
 class BB_RTR(IStrategy):
     '''
         BB_RPB_TSL_RNG with conditions from true_lambo and dca
+
+        (1) Improve 7_33 x_201
     '''
 
     ##########################################################################
@@ -150,7 +152,7 @@ class BB_RTR(IStrategy):
 
     # sell space
     sell_params = {
-        "pHSL": -1,                         # Disable
+        "pHSL": -0.998,                         # Disable
         "pPF_1": 0.019,
         "pPF_2": 0.065,
         "pSL_1": 0.019,
@@ -181,7 +183,7 @@ class BB_RTR(IStrategy):
     inf_1h = '1h'
 
     # Disabled
-    stoploss = -1
+    stoploss = -0.998
 
     # Options
     use_custom_stoploss = True
@@ -399,7 +401,12 @@ class BB_RTR(IStrategy):
         ):
             return f"sell_offset( {buy_tag})"
 
-        ## Disable
+        # sell vwap dump
+        if (
+                (current_profit > 0.005)
+                and (last_candle['ema_vwap_diff_50'] < 0.012)
+            ):
+            return f"sell_vwap_dump( {buy_tag})"
 
         # stoploss
         if (
@@ -620,9 +627,12 @@ class BB_RTR(IStrategy):
 
         is_pump_1 = ( (dataframe['close'].rolling(48).max() >= (dataframe['close'] * self.buy_pump_1_factor.value )) )
 
-        is_pump_2 = ( (dataframe['close'].rolling(48).max() >= (dataframe['close'] * self.buy_pump_2_factor.value )) )
+        pump_protection_strict = (
+                (dataframe['close'].rolling(48).max() >= (dataframe['close'] * 1.125 )) &
+                ( (dataframe['close'].rolling(288).max() >= (dataframe['close'] * 1.225 )) )
+            )
 
-        is_pump_3 = (
+        pump_protection_loose = (
                 (dataframe['close'].rolling(48).max() >= (dataframe['close'] * 1.05 )) &
                 ( (dataframe['close'].rolling(288).max() >= (dataframe['close'] * 1.125 )) )
             )
@@ -630,6 +640,21 @@ class BB_RTR(IStrategy):
         is_pump_4 = (
                 (dataframe['close'].rolling(48).max() >= (dataframe['close'] * 1.075 )) &
                 ( (dataframe['close'].rolling(288).max() >= (dataframe['close'] * 1.17 )) )
+            )
+
+        is_crash_1 = (
+                (dataframe['tpct_change_1'] < 0.08) &
+                (dataframe['tpct_change_2'] < 0.08)
+            )
+
+        is_crash_2 = (
+                (dataframe['tpct_change_1'] < 0.06) &
+                (dataframe['tpct_change_2'] < 0.06)
+            )
+
+        is_crash_3 = (
+                (dataframe['tpct_change_1'] < 0.055) &
+                (dataframe['tpct_change_2'] < 0.055)
             )
 
         rsi_check = (
@@ -662,8 +687,7 @@ class BB_RTR(IStrategy):
                 &
                 (dataframe['closedelta'] > dataframe['close'] * self.buy_closedelta.value / 1000 ) &    # from BinH
                 (dataframe['close'] < dataframe['bb_lowerband3'] * self.buy_bb_factor.value) &
-                (dataframe['tpct_change_1'] < 0.08) &
-                (dataframe['tpct_change_2'] < 0.08)
+                (is_crash_1)
             )
 
         is_local_uptrend = (                                                                            # from NFI next gen
@@ -701,7 +725,7 @@ class BB_RTR(IStrategy):
                 (dataframe['cti'] < self.buy_vwap_cti.value) &
                 (dataframe['EWO'] > 8) &
                 (rsi_check) &
-                (is_pump_1)
+                (pump_protection_strict)
             )
 
         is_vwap_2 = (
@@ -712,7 +736,7 @@ class BB_RTR(IStrategy):
                 (dataframe['EWO'] > 4) &
                 (dataframe['EWO'] < 8) &
                 (rsi_check) &
-                (is_pump_2)
+                (pump_protection_strict)
             )
 
         is_vwap_3 = (
@@ -721,11 +745,11 @@ class BB_RTR(IStrategy):
                 (dataframe['closedelta'] > dataframe['close'] * self.buy_vwap_closedelta_3.value / 1000 ) &
                 (dataframe['cti'] < self.buy_vwap_cti_3.value) &
                 (dataframe['EWO'] < 4) &
-                (dataframe['EWO'] > -2.5)
-                &
+                (dataframe['EWO'] > -2.5) &
                 (dataframe['rsi_28_1h'] < 46) &
-                (rsi_check) &
-                (is_pump_3)
+                (rsi_check)
+                &
+                (pump_protection_loose)
             )
 
         is_VWAP = (
@@ -819,7 +843,7 @@ class BB_RTR(IStrategy):
                 (dataframe['rsi'] < 32.0) &
                 (dataframe['volume'] < (dataframe['volume_mean_4'] * 2.0))
                 &
-                (is_pump_3) &
+                (pump_protection_loose) &
                 (rsi_check)
             )
 
