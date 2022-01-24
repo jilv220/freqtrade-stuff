@@ -85,7 +85,7 @@ class BB_RTR(IStrategy):
     '''
         BB_RPB_TSL_RNG with conditions from true_lambo and dca
 
-        (1) Improve 7_33 x_201
+        (1) Remove sell_offset
     '''
 
     ##########################################################################
@@ -147,7 +147,6 @@ class BB_RTR(IStrategy):
         "buy_vwap_width": 1.308,
         "buy_vwap_width_2": 3.212,
         "buy_vwap_width_3": 0.49,
-        ##
     }
 
     # sell space
@@ -242,7 +241,7 @@ class BB_RTR(IStrategy):
     buy_vwap_closedelta_2 = DecimalParameter(10.0, 30.0, default=15.0, optimize = is_optimize_vwap_2)
     buy_vwap_cti_2 = DecimalParameter(-0.9, -0.0, default=-0.6 , optimize = is_optimize_vwap_2)
 
-    is_optimize_vwap_3 = True
+    is_optimize_vwap_3 = False
     buy_vwap_width_3 = DecimalParameter(0.05, 10.0, default=0.80 , optimize = is_optimize_vwap_3)
     buy_vwap_closedelta_3 = DecimalParameter(10.0, 30.0, default=15.0, optimize = is_optimize_vwap_3)
     buy_vwap_cti_3 = DecimalParameter(-0.9, -0.0, default=-0.6 , optimize = is_optimize_vwap_3)
@@ -298,7 +297,7 @@ class BB_RTR(IStrategy):
     sell_cti_r_cti = DecimalParameter(0.55, 1, default=0.5 , optimize = is_optimize_cti_r)
     sell_cti_r_r = DecimalParameter(-15, 0, default=-20 , optimize = is_optimize_cti_r)
 
-    is_optimize_cmf_div = True
+    is_optimize_cmf_div = False
     sell_cmf_div_1_profit = DecimalParameter(0.005, 0.02, default=0.005 , optimize = is_optimize_cmf_div)
     sell_cmf_div_1_cmf = DecimalParameter(0.0, 0.5, default=0.0 , optimize = is_optimize_cmf_div)
     sell_cmf_div_2_profit = DecimalParameter(0.005, 0.02, default=0.005 , optimize = is_optimize_cmf_div)
@@ -399,16 +398,6 @@ class BB_RTR(IStrategy):
         # sell recover
         if (max_loss > 0.06) and (0.05 > current_profit > 0.01) and (last_candle['rsi'] < 46):
             return f"signal_profit_r_1( {buy_tag})"
-
-        # sell offset
-        if (
-                (current_profit > 0.005)
-                and (last_candle['close'] > last_candle['sma_9'])
-                and (last_candle['close'] > last_candle['ema_24'] * self.high_offset_2.value)
-                and (last_candle['rsi'] > 50)
-                and (last_candle['rsi_fast'] > last_candle['rsi_slow'])
-        ):
-            return f"sell_offset( {buy_tag})"
 
         # sell vwap dump
         if (
