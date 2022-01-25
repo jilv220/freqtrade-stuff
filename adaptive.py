@@ -70,10 +70,10 @@ class adaptive(IStrategy):
         dataframe.loc[
             (
                 (dataframe['kama'] > dataframe['fama']) &
-                (dataframe['fama'] > dataframe['mama']) &
-                (dataframe['r_14'] < -82) &
-                (dataframe['mama_diff'] < -0.019) &
-                (dataframe['cti'] < -0.82)
+                (dataframe['fama'] > dataframe['mama'] * 0.981) &
+                (dataframe['r_14'] < -61.3) &
+                (dataframe['mama_diff'] < -0.025) &
+                (dataframe['cti'] < -0.715)
                 &
                 (dataframe['close'].rolling(48).max() >= (dataframe['close'] * 1.05 )) &
                 ( (dataframe['close'].rolling(288).max() >= (dataframe['close'] * 1.125 )) )
