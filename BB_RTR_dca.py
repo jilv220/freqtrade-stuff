@@ -85,7 +85,7 @@ class BB_RTR(IStrategy):
     '''
         BB_RPB_TSL_RNG with conditions from true_lambo and dca
 
-        (1) Remove sell_offset
+        (1) add adaptive
     '''
 
     ##########################################################################
@@ -147,6 +147,11 @@ class BB_RTR(IStrategy):
         "buy_vwap_width": 1.308,
         "buy_vwap_width_2": 3.212,
         "buy_vwap_width_3": 0.49,
+        ##
+        "buy_ada_cti": -0.715,
+        "buy_ada_mama_diff": -0.025,
+        "buy_ada_mama_offset": 0.981,
+        "buy_ada_r_14": -61.294,
     }
 
     # sell space
@@ -256,6 +261,12 @@ class BB_RTR(IStrategy):
     buy_V_cti_5 = DecimalParameter(-0.95, -0.0, default=-0.6 , optimize = is_optimize_V_5)
     buy_V_r14_5 = DecimalParameter(-100, 0, default=-60 , optimize = is_optimize_V_5)
     buy_V_mfi_5 = DecimalParameter(10, 40, default=30 , optimize = is_optimize_V_5)
+
+    is_optimize_ada = True
+    buy_ada_mama_offset = DecimalParameter(0.9, 1.2, default=1 , optimize = is_optimize_ada)
+    buy_ada_r_14 = DecimalParameter(-100, -44, default=-82 , optimize = is_optimize_ada)
+    buy_ada_mama_diff = DecimalParameter(-0.05, -0.01, default=-0.019 , optimize = is_optimize_ada)
+    buy_ada_cti = DecimalParameter(-1, -0.4, default=-0.82 , optimize = is_optimize_ada)
 
     is_optimize_gumbo = False
     buy_gumbo_ema = DecimalParameter(0.9, 1.2, default=0.97 , optimize = is_optimize_gumbo)
@@ -372,6 +383,8 @@ class BB_RTR(IStrategy):
             buy_tag = trade.buy_tag
         buy_tags = buy_tag.split()
 
+        pump_tags = ['adaptive ']
+
         # sell cti_r
         if 0.012 > current_profit >= 0.0 :
             if (last_candle['cti'] > self.sell_cti_r_cti.value) and (last_candle['r_14'] > self.sell_cti_r_r.value):
@@ -412,6 +425,7 @@ class BB_RTR(IStrategy):
                 (current_profit > 0.005)
                 and (last_candle['cmf'] > 0)
                 and (last_candle['cmf_div_slow'] == 1)
+                #and buy_tag not in pump_tags
         ):
             return f"sell_cmf_div( {buy_tag})"
 
@@ -574,6 +588,12 @@ class BB_RTR(IStrategy):
         dataframe['momdiv_sell'] = mom['momdiv_sell']
         dataframe['momdiv_coh'] = mom['momdiv_coh']
         dataframe['momdiv_col'] = mom['momdiv_col']
+
+        # MAMA, FAMA, KAMA
+        dataframe['hl2'] = (dataframe['high'] + dataframe['low']) / 2
+        dataframe['mama'], dataframe['fama'] = ta.MAMA(dataframe['hl2'], 0.25, 0.025)
+        dataframe['mama_diff'] = ( ( dataframe['mama'] - dataframe['fama'] ) / dataframe['hl2'] )
+        dataframe['kama'] = ta.KAMA(dataframe['close'], 84)
 
         # cmf div
         dataframe['cmf_div_fast'] = ( ( dataframe['cmf'].rolling(12).max() >= dataframe['cmf'] * 1.025 ) )
@@ -803,6 +823,17 @@ class BB_RTR(IStrategy):
                 ( (dataframe['close'].rolling(48).max() >= (dataframe['close'] * 1.1 )) )
             )
 
+        is_adaptive = (
+                (dataframe['kama'] > dataframe['fama']) &
+                (dataframe['fama'] > dataframe['mama'] * self.buy_ada_mama_offset.value) &
+                (dataframe['r_14'] < self.buy_ada_r_14.value) &
+                (dataframe['mama_diff'] < self.buy_ada_mama_diff.value) &
+                (dataframe['cti'] < self.buy_ada_cti.value)
+                &
+                (pump_protection_strict) &
+                (rsi_check)
+            )
+
         # NFI quick mode
 
         is_nfi_32 = (
@@ -899,6 +930,9 @@ class BB_RTR(IStrategy):
 
         conditions.append(is_insta)
         dataframe.loc[is_insta, 'buy_tag'] += 'insta '
+
+        conditions.append(is_adaptive)
+        dataframe.loc[is_adaptive, 'buy_tag'] += 'adaptive '
 
         # NFI
         conditions.append(is_nfi_32)
