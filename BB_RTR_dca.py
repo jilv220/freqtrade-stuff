@@ -21,6 +21,24 @@ def ha_typical_price(bars):
     res = (bars['ha_high'] + bars['ha_low'] + bars['ha_close']) / 3.
     return Series(index=bars.index, data=res)
 
+def is_support(row_data) -> bool:
+    conditions = []
+    for row in range(len(row_data) - 1):
+        if row < len(row_data) / 2:
+            conditions.append(row_data[row] > row_data[row + 1])
+        else:
+            conditions.append(row_data[row] < row_data[row + 1])
+    return reduce(lambda x, y: x & y, conditions)
+
+def is_resistance(row_data) -> bool:
+    conditions = []
+    for row in range(len(row_data) - 1):
+        if row < len(row_data) / 2:
+            conditions.append(row_data[row] < row_data[row + 1])
+        else:
+            conditions.append(row_data[row] > row_data[row + 1])
+    return reduce(lambda x, y: x & y, conditions)
+
 def EWO(dataframe, ema_length=5, ema2_length=35):
     df = dataframe.copy()
     ema1 = ta.EMA(df, timeperiod=ema_length)
@@ -85,7 +103,8 @@ class BB_RTR(IStrategy):
     '''
         BB_RPB_TSL_RNG with conditions from true_lambo and dca
 
-        (1) add adaptive
+        (1) add btc protection to conditions prone to buy high
+
     '''
 
     ##########################################################################
@@ -161,8 +180,6 @@ class BB_RTR(IStrategy):
         "pPF_2": 0.065,
         "pSL_1": 0.019,
         "pSL_2": 0.062,
-        ##
-        "high_offset_2": 0.997,
         ##
         "sell_cti_r_cti": 0.844,
         "sell_cti_r_r": -19.99,
@@ -290,8 +307,6 @@ class BB_RTR(IStrategy):
     buy_pump_2_factor = DecimalParameter(1.0, 1.20, default= 1.1 , optimize = is_optimize_pump_2)
 
     ## Sell params
-    is_optimize_sell_offset = False
-    high_offset_2        = DecimalParameter(0.99, 1.5, default=sell_params['high_offset_2'], space='sell', optimize=is_optimize_sell_offset)
 
     is_optimize_sell_u_e_2 = False
     sell_u_e_2_cmf = DecimalParameter(-0.4, 0.0, default=0.0, optimize = is_optimize_sell_u_e_2)
@@ -316,16 +331,15 @@ class BB_RTR(IStrategy):
 
     ## Trailing params
 
-    # hard stoploss profit
-    is_optimize_trailing = False
-    pHSL = DecimalParameter(-0.200, -0.040, default=-0.08, decimals=3, space='sell', load=True, optimize=is_optimize_trailing)
-    # profit threshold 1, trigger point, SL_1 is used
-    pPF_1 = DecimalParameter(0.008, 0.020, default=0.016, decimals=3, space='sell', load=True, optimize=is_optimize_trailing)
-    pSL_1 = DecimalParameter(0.008, 0.020, default=0.011, decimals=3, space='sell', load=True, optimize=is_optimize_trailing)
+    is_optimize_trailing = True
+    pHSL = DecimalParameter(-0.200, -0.040, default=-0.08, decimals=3, space='sell', load=True, optimize=False)
+
+    pPF_1 = DecimalParameter(0.008, 0.030, default=0.016, decimals=3, space='sell', load=True, optimize=False)
+    pSL_1 = DecimalParameter(0.008, 0.030, default=0.011, decimals=3, space='sell', load=True, optimize=is_optimize_trailing)
 
     # profit threshold 2, SL_2 is used
-    pPF_2 = DecimalParameter(0.040, 0.100, default=0.080, decimals=3, space='sell', load=True, optimize=is_optimize_trailing)
-    pSL_2 = DecimalParameter(0.020, 0.070, default=0.040, decimals=3, space='sell', load=True, optimize=is_optimize_trailing)
+    pPF_2 = DecimalParameter(0.050, 0.200, default=0.080, decimals=3, space='sell', load=True, optimize=is_optimize_trailing)
+    pSL_2 = DecimalParameter(0.030, 0.200, default=0.040, decimals=3, space='sell', load=True, optimize=is_optimize_trailing)
 
     ############################################################################
 
@@ -333,6 +347,7 @@ class BB_RTR(IStrategy):
 
         pairs = self.dp.current_whitelist()
         informative_pairs = [(pair, '1h') for pair in pairs]
+        informative_pairs += [("BTC/USDT", "5m")]
 
         return informative_pairs
 
@@ -366,6 +381,27 @@ class BB_RTR(IStrategy):
 
         return stoploss_from_open(sl_profit, current_profit)
 
+    def confirm_trade_entry(self, pair: str, order_type: str, amount: float, rate: float, time_in_force: str, **kwargs) -> bool:
+
+        dataframe, _ = self.dp.get_analyzed_dataframe(pair, self.timeframe)
+        max_slip = 0.983
+
+        if(len(dataframe) < 1):
+            return False
+
+        dataframe = dataframe.iloc[-1].squeeze()
+        if ((rate > dataframe['close'])) :
+
+            slippage = ( (rate / dataframe['close']) - 1 ) * 100
+
+            if slippage < max_slip:
+                return True
+            else:
+                return False
+
+        return True
+
+
     def custom_sell(self, pair: str, trade: 'Trade', current_time: 'datetime', current_rate: float,
                     current_profit: float, **kwargs):
 
@@ -373,7 +409,6 @@ class BB_RTR(IStrategy):
 
         last_candle = dataframe.iloc[-1]
         previous_candle_1 = dataframe.iloc[-2]
-        previous_candle_2 = dataframe.iloc[-3]
 
         max_profit = ((trade.max_rate - trade.open_rate) / trade.open_rate)
         max_loss = ((trade.open_rate - trade.min_rate) / trade.min_rate)
@@ -385,11 +420,6 @@ class BB_RTR(IStrategy):
 
         pump_tags = ['adaptive ']
 
-        # sell cti_r
-        if 0.012 > current_profit >= 0.0 :
-            if (last_candle['cti'] > self.sell_cti_r_cti.value) and (last_candle['r_14'] > self.sell_cti_r_r.value):
-                return f"sell_profit_cti_r_0_1( {buy_tag})"
-
         # main sell
         if current_profit > 0.02:
             if (last_candle['momdiv_sell_1h'] == True):
@@ -400,6 +430,16 @@ class BB_RTR(IStrategy):
                 return f"signal_profit_q_momdiv_coh( {buy_tag})"
             if (last_candle['cti_40_1h'] > 0.844) and (last_candle['r_84_1h'] > -20):
                 return f"signal_profit_cti_r( {buy_tag})"
+
+        # sell cti_r
+        if 0.012 > current_profit >= 0.0 :
+            if (last_candle['cti'] > self.sell_cti_r_cti.value) and (last_candle['r_14'] > self.sell_cti_r_r.value):
+                return f"sell_profit_cti_r_1( {buy_tag})"
+
+        # sell over 200
+        if last_candle['close'] > last_candle['ema_200']:
+            if (current_profit > 0.01) and (last_candle['rsi'] > 83):
+                return f"sell_profit_o_1 ( {buy_tag})"
 
         # sell quick
         if (0.06 > current_profit > 0.02) and (last_candle['rsi'] > 80.0):
@@ -414,7 +454,7 @@ class BB_RTR(IStrategy):
 
         # sell vwap dump
         if (
-                (current_profit > 0.005)
+                (0.02 > current_profit > 0.005)
                 and (last_candle['ema_vwap_diff_50'] > 0.0)
                 and (last_candle['ema_vwap_diff_50'] < 0.012)
         ):
@@ -422,10 +462,9 @@ class BB_RTR(IStrategy):
 
         # sell cmf div
         if (
-                (current_profit > 0.005)
+                (0.02 > current_profit > 0.005)
                 and (last_candle['cmf'] > 0)
                 and (last_candle['cmf_div_slow'] == 1)
-                #and buy_tag not in pump_tags
         ):
             return f"sell_cmf_div( {buy_tag})"
 
@@ -500,6 +539,11 @@ class BB_RTR(IStrategy):
         # CTI
         dataframe['cti'] = pta.cti(dataframe["close"], length=20)
 
+        # CRSI (3, 2, 100)
+        crsi_closechange = dataframe['close'] / dataframe['close'].shift(1)
+        crsi_updown = np.where(crsi_closechange.gt(1), 1.0, np.where(crsi_closechange.lt(1), -1.0, 0.0))
+        dataframe['crsi'] =  (ta.RSI(dataframe['close'], timeperiod=3) + ta.RSI(crsi_updown, timeperiod=2) + ta.ROC(dataframe['close'], 100)) / 3
+
         # CMF
         dataframe['cmf'] = chaikin_money_flow(dataframe, 20)
 
@@ -511,6 +555,7 @@ class BB_RTR(IStrategy):
         dataframe['ema_12'] = ta.EMA(dataframe, timeperiod=12)
         dataframe['ema_13'] = ta.EMA(dataframe, timeperiod=13)
         dataframe['ema_16'] = ta.EMA(dataframe, timeperiod=16)
+        dataframe['ema_20'] = ta.EMA(dataframe, timeperiod=20)
         dataframe['ema_24'] = ta.EMA(dataframe, timeperiod=24)
         dataframe['ema_26'] = ta.EMA(dataframe, timeperiod=26)
         dataframe['ema_50'] = ta.EMA(dataframe, timeperiod=50)
@@ -522,6 +567,8 @@ class BB_RTR(IStrategy):
         dataframe['sma_9'] = ta.SMA(dataframe, timeperiod=9)
         dataframe['sma_15'] = ta.SMA(dataframe, timeperiod=15)
         dataframe['sma_21'] = ta.SMA(dataframe, timeperiod=21)
+        dataframe['sma_30'] = ta.SMA(dataframe, timeperiod=30)
+        dataframe['sma_75'] = ta.SMA(dataframe, timeperiod=75)
 
         # VWAP
         vwap_low, vwap, vwap_high = VWAPB(dataframe, 20, 1)
@@ -568,6 +615,8 @@ class BB_RTR(IStrategy):
 
         # Williams %R
         dataframe['r_14'] = williams_r(dataframe, period=14)
+        dataframe['r_32'] = williams_r(dataframe, period=32)
+        dataframe['r_480'] = williams_r(dataframe, period=480)
 
         # Volume
         dataframe['volume_mean_4'] = dataframe['volume'].rolling(4).mean().shift(1)
@@ -604,6 +653,20 @@ class BB_RTR(IStrategy):
 
         ############################################################################
 
+        # BTC info
+
+        """
+        Only applied to conditions prone to buy high such as high EWO conditions
+
+        """
+        inf_tf = '5m'
+        informative = self.dp.get_pair_dataframe('BTC/USDT', timeframe=inf_tf)
+        informative_btc = informative.copy().shift(1)
+
+        dataframe['btc_close'] = informative_btc['close']
+
+        ############################################################################
+
         # 1h tf
         inf_tf = '1h'
         informative = self.dp.get_pair_dataframe(pair=metadata['pair'], timeframe=inf_tf)
@@ -628,13 +691,25 @@ class BB_RTR(IStrategy):
         # EMA
         informative['ema_20'] = ta.EMA(informative, timeperiod=20)
         informative['ema_26'] = ta.EMA(informative, timeperiod=26)
+        informative['ema_50'] = ta.EMA(informative, timeperiod=50)
+        informative['ema_100'] = ta.EMA(informative, timeperiod=100)
         informative['ema_200'] = ta.EMA(informative, timeperiod=200)
 
         # Williams %R
         informative['r_84'] = williams_r(informative, period=84)
+        informative['r_480'] = williams_r(informative, period=480)
 
         # CTI
+        informative['cti'] = pta.cti(informative["close"], length=20)
         informative['cti_40'] = pta.cti(informative["close"], length=40)
+
+        # CRSI (3, 2, 100)
+        crsi_closechange = informative['close'] / informative['close'].shift(1)
+        crsi_updown = np.where(crsi_closechange.gt(1), 1.0, np.where(crsi_closechange.lt(1), -1.0, 0.0))
+        informative['crsi'] =  (ta.RSI(informative['close'], timeperiod=3) + ta.RSI(crsi_updown, timeperiod=2) + ta.ROC(informative['close'], 100)) / 3
+
+        # CMF
+        informative['cmf'] = chaikin_money_flow(informative, 20)
 
         # MOMDIV
         mom = momdiv(informative)
@@ -642,6 +717,13 @@ class BB_RTR(IStrategy):
         informative['momdiv_sell'] = mom['momdiv_sell']
         informative['momdiv_coh'] = mom['momdiv_coh']
         informative['momdiv_col'] = mom['momdiv_col']
+
+        # S/R
+        res_series = informative['high'].rolling(window = 5, center=True).apply(lambda row: is_resistance(row), raw=True).shift(2)
+        sup_series = informative['low'].rolling(window = 5, center=True).apply(lambda row: is_support(row), raw=True).shift(2)
+        informative['res_level'] = Series(np.where(res_series, np.where(informative['close'] > informative['open'], informative['close'], informative['open']), float('NaN'))).ffill()
+        informative['res_hlevel'] = Series(np.where(res_series, informative['high'], float('NaN'))).ffill()
+        informative['sup_level'] = Series(np.where(sup_series, np.where(informative['close'] < informative['open'], informative['close'], informative['open']), float('NaN'))).ffill()
 
         dataframe = merge_informative_pair(dataframe, informative, self.timeframe, inf_tf, ffill=True)
 
@@ -668,9 +750,14 @@ class BB_RTR(IStrategy):
                 ( (dataframe['close'].rolling(288).max() >= (dataframe['close'] * 1.125 )) )
             )
 
+        pump_protection_mid = (
+                (dataframe['close'].rolling(48).max() >= (dataframe['close'] * 1.1 )) &
+                ( (dataframe['close'].rolling(288).max() >= (dataframe['close'] * 1.1 )) )
+            )
+
         is_pump_4 = (
                 (dataframe['close'].rolling(48).max() >= (dataframe['close'] * 1.075 )) &
-                ( (dataframe['close'].rolling(288).max() >= (dataframe['close'] * 1.17 )) )
+                ( (dataframe['close'].rolling(288).max() >= (dataframe['close'] * 1.175 )) )
             )
 
         is_crash_1 = (
@@ -688,6 +775,18 @@ class BB_RTR(IStrategy):
                 (dataframe['tpct_change_2'] < 0.055)
             )
 
+        #is_sup_level_1 = (
+                #(dataframe['close'] > (dataframe['sup_level_1h'] * 0.93))
+            #)
+
+        #is_sup_level_2 = (
+                #(dataframe['close'] > (dataframe['sup_level_1h'] * 0.9))
+            #)
+
+        btc_dump = (
+                (dataframe['btc_close'].rolling(24).max() >= (dataframe['btc_close'] * 1.03 ))
+            )
+
         rsi_check = (
                 (dataframe['rsi_84'] < 60) &
                 (dataframe['rsi_112'] < 60)
@@ -695,7 +794,7 @@ class BB_RTR(IStrategy):
 
         min_EWO_check = ( (dataframe['EWO'] > -5.585) )
 
-        max_EWO_check = ( (dataframe['EWO'] < 10.6) )
+        max_EWO_check = ( (dataframe['EWO'] < 11.8) )
 
         ############################################################################
 
@@ -746,7 +845,8 @@ class BB_RTR(IStrategy):
                 (dataframe['EWO'] > self.buy_ewo_high.value) &
                 (dataframe['close'] < dataframe['ema_16'] * self.buy_ema_high_2.value) &
                 (dataframe['rsi'] < self.buy_rsi.value) &
-                (rsi_check)
+                (rsi_check) &
+                (btc_dump == 0)
             )
 
         is_vwap = (
@@ -756,7 +856,8 @@ class BB_RTR(IStrategy):
                 (dataframe['cti'] < self.buy_vwap_cti.value) &
                 (dataframe['EWO'] > 8) &
                 (rsi_check) &
-                (pump_protection_strict)
+                (pump_protection_strict) &
+                (btc_dump == 0)
             )
 
         is_vwap_2 = (
@@ -767,7 +868,8 @@ class BB_RTR(IStrategy):
                 (dataframe['EWO'] > 4) &
                 (dataframe['EWO'] < 8) &
                 (rsi_check) &
-                (pump_protection_strict)
+                (pump_protection_strict) &
+                (btc_dump == 0)
             )
 
         is_vwap_3 = (
@@ -778,9 +880,9 @@ class BB_RTR(IStrategy):
                 (dataframe['EWO'] < 4) &
                 (dataframe['EWO'] > -2.5) &
                 (dataframe['rsi_28_1h'] < 46) &
-                (rsi_check)
-                &
-                (pump_protection_loose)
+                (pump_protection_loose) &
+                (rsi_check) &
+                (btc_dump == 0)
             )
 
         is_VWAP = (
@@ -788,7 +890,8 @@ class BB_RTR(IStrategy):
                 (dataframe['tpct_change_1'] > 0.04) &
                 (dataframe['cti'] < -0.8) &
                 (dataframe['rsi'] < 35) &
-                (rsi_check)
+                (rsi_check) &
+                (btc_dump == 0)
             )
 
         is_no_trend_4 = (
@@ -814,13 +917,14 @@ class BB_RTR(IStrategy):
             )
 
         is_insta = (
-                (dataframe['bb_width_1h'] > 0.13) &
-                (dataframe['r_14'] < -50) &
-                (dataframe['r_84_1h'] < -69) &
-                (dataframe['cti'] < -0.84) &
-                (dataframe['cti_40_1h'] < -0.73)
+                (dataframe['bb_width_1h'] > 0.131) &
+                (dataframe['r_14'] < -51) &
+                (dataframe['r_84_1h'] < -70) &
+                (dataframe['cti'] < -0.845) &
+                (dataframe['cti_40_1h'] < -0.735)
                 &
-                ( (dataframe['close'].rolling(48).max() >= (dataframe['close'] * 1.1 )) )
+                ( (dataframe['close'].rolling(48).max() >= (dataframe['close'] * 1.1 )) ) &
+                (btc_dump == 0)
             )
 
         is_adaptive = (
@@ -877,6 +981,60 @@ class BB_RTR(IStrategy):
                 (rsi_check)
             )
 
+        is_nfix_1 = (
+                (((dataframe['close'] - dataframe['open'].rolling(12).min()) / dataframe['open'].rolling(12).min()) > 0.027) &
+                (dataframe['rsi'] < 35.0) &
+                (dataframe['r_32'] < -80.0) &
+                (dataframe['mfi'] < 31.0) &
+                (dataframe['rsi_1h'] > 30.0) &
+                (dataframe['rsi_1h'] < 84.0) &
+                (dataframe['r_480_1h'] > -99.0) &
+                (rsi_check)
+            )
+
+        is_nfix_6 = (
+                (dataframe['close'] < dataframe['sma_15'] * 0.937) &
+                (dataframe['crsi'] < 30.0) &
+                (dataframe['rsi'] < dataframe['rsi'].shift(1)) &
+                (dataframe['rsi'] < 28.0) &
+                (dataframe['cti'] < -0.78) &
+                (dataframe['cci'] < -200.0) &
+                (dataframe['r_480_1h'] < -12.0) &
+                (rsi_check)
+            )
+
+        is_nfix_7 = (
+                (dataframe['ema_50_1h'] > dataframe['ema_100_1h']) &
+                (dataframe['close'] < dataframe['sma_30'] * 0.94) &
+                (dataframe['close'] < dataframe['bb_lowerband2'] * 0.995) &
+                (dataframe['cti'] < -0.9) &
+                (dataframe['r_14'] < -95.0) &
+                (rsi_check)
+            )
+
+        is_nfix_8 = (
+                (dataframe['close'] < dataframe['sma_30'] * 0.927) &
+                (dataframe['EWO'] > 3.2) &
+                (dataframe['rsi'] < 33.0) &
+                (dataframe['cti'] < -0.9) &
+                (dataframe['r_14'] < -97.0) &
+                (rsi_check)
+            )
+
+        is_nfix_12 = (
+                (dataframe['close'] < dataframe['ema_20'] * 0.938) &
+                (dataframe['EWO'] > 0.1) &
+                (dataframe['rsi'] < 40.0) &
+                (dataframe['cti'] < -0.9) &
+                (dataframe['r_480_1h'] < -20.0) &
+                (dataframe['volume'] < (dataframe['volume_mean_4'] * 2.8))
+                &
+                (dataframe['close'] > (dataframe['sup_level_1h'] * 0.9))
+                &
+                (rsi_check) &
+                (max_EWO_check)
+            )
+
         is_nfi7_33 = (
                 (dataframe['moderi_96']) &
                 (dataframe['cti'] < -0.88) &
@@ -893,9 +1051,10 @@ class BB_RTR(IStrategy):
                 (dataframe['bb_lowerband2_40'].shift() > 0) &
                 (dataframe['bb_delta_cluc'] > dataframe['close'] * 0.059) &
                 (dataframe['ha_closedelta'] > dataframe['close'] * 0.023) &
-                (dataframe['tail'] < dataframe['bb_delta_cluc'] * 0.418) &
+                (dataframe['tail'] < dataframe['bb_delta_cluc'] * 0.24) &
                 (dataframe['close'] < dataframe['bb_lowerband2_40'].shift()) &
-                (dataframe['close'] < dataframe['close'].shift())
+                (dataframe['close'] < dataframe['close'].shift()) &
+                (btc_dump == 0)
             )
 
         is_BB_checked = is_dip & is_break
@@ -941,17 +1100,33 @@ class BB_RTR(IStrategy):
         conditions.append(is_nfi_33)
         dataframe.loc[is_nfi_33, 'buy_tag'] += 'nfi_33 '
 
-        conditions.append(is_nfix_39)
-        dataframe.loc[is_nfix_39, 'buy_tag'] += 'x_39 '
-
-        conditions.append(is_nfix_201)
-        dataframe.loc[is_nfix_201, 'buy_tag'] += 'x_201 '
-
         conditions.append(is_nfi7_33)
         dataframe.loc[is_nfi7_33, 'buy_tag'] += '7_33 '
 
         conditions.append(is_nfi_sma_3)
         dataframe.loc[is_nfi_sma_3, 'buy_tag'] += 'sma_3 '
+
+        # NFIX
+        conditions.append(is_nfix_1)
+        dataframe.loc[is_nfix_1, 'buy_tag'] += 'x_1 '
+
+        conditions.append(is_nfix_6)
+        dataframe.loc[is_nfix_6, 'buy_tag'] += 'x_6 '
+
+        conditions.append(is_nfix_7)
+        dataframe.loc[is_nfix_7, 'buy_tag'] += 'x_7 '
+
+        conditions.append(is_nfix_8)
+        dataframe.loc[is_nfix_8, 'buy_tag'] += 'x_8 '
+
+        conditions.append(is_nfix_12)
+        dataframe.loc[is_nfix_12, 'buy_tag'] += 'x_12 '
+
+        conditions.append(is_nfix_39)
+        dataframe.loc[is_nfix_39, 'buy_tag'] += 'x_39 '
+
+        conditions.append(is_nfix_201)
+        dataframe.loc[is_nfix_201, 'buy_tag'] += 'x_201 '
 
         # Very Bear
         conditions.append(is_V_5)
